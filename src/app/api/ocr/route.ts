@@ -1,54 +1,54 @@
 // src/app/api/ocr/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { GoogleAuth } from "google-auth-library";
-import { GoogleGenAI } from "@google/genai";
+import { GoogleGenAI, Type, type Schema } from "@google/genai";
 
 // Initialize Gemini client using GEMINI_API_KEY
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
 // Define the expected receipt JSON schema for Gemini's structured output
-const receiptSchema = {
-  type: "OBJECT",
+const receiptSchema: Schema = {
+  type: Type.OBJECT,
   properties: {
     currency: {
-      type: "STRING",
+      type: Type.STRING,
       description: "Currency symbol or code exactly as shown on the receipt (e.g. '$', '₹', 'Rs', 'PKR'). Never default to '$' — infer from the receipt's actual region/symbol/text."
     },
     items: {
-      type: "ARRAY",
+      type: Type.ARRAY,
       description: "List of purchasable line items only. Do NOT include service charges, mandates, surcharges, or fees here — those go in serviceCharge.",
       items: {
-        type: "OBJECT",
+        type: Type.OBJECT,
         properties: {
-          name: { type: "STRING", description: "Item description" },
-          qty: { type: "NUMBER", description: "Quantity of the item" },
-          price: { type: "NUMBER", description: "Total price for the line (qty × unit price)" }
+          name: { type: Type.STRING, description: "Item description" },
+          qty: { type: Type.NUMBER, description: "Quantity of the item" },
+          price: { type: Type.NUMBER, description: "Total price for the line (qty × unit price)" }
         },
         required: ["name", "qty", "price"]
       }
     },
     itemsSubtotal: {
-      type: "NUMBER",
+      type: Type.NUMBER,
       description: "MUST equal the exact sum of all items[].price, computed by you. This is NEVER a number copied from the receipt's printed 'Subtotal' line — compute it yourself from the items array. If the printed subtotal on the receipt differs from this sum, the difference belongs in serviceCharge, not here."
     },
     discount: {
-      type: "NUMBER",
+      type: Type.NUMBER,
       description: "Total of any discount, coupon, or 'off' line, expressed as a positive number representing the amount removed. 0 if none."
     },
     serviceCharge: {
-      type: "NUMBER",
+      type: Type.NUMBER,
       description: "Any MANDATORY charge that is not government tax and not a voluntary tip — e.g. auto-gratuity, 'service charge (20%)', 'SF mandate', 'healthy SF surcharge', compulsory party fees. This absorbs any gap between itemsSubtotal and the receipt's printed subtotal/total. 0 if none."
     },
     tax: {
-      type: "NUMBER",
+      type: Type.NUMBER,
       description: "Government sales tax / GST / VAT only. Sum multiple tax lines (e.g. CGST + SGST) into this single value. Do not include service charges here."
     },
     tip: {
-      type: "NUMBER",
+      type: Type.NUMBER,
       description: "ONLY a voluntary tip actually charged and included in the total. Do NOT extract a number from a 'suggested tip' chart (e.g. 15%/20%/25% options) — those are suggestions, not charges. 0 if no tip was actually added."
     },
     total: {
-      type: "NUMBER",
+      type: Type.NUMBER,
       description: "Grand total exactly as printed on the receipt."
     }
   },
@@ -115,7 +115,7 @@ export async function POST(req: NextRequest) {
       contents: [systemPrompt, userPrompt],
       config: {
         responseMimeType: "application/json",
-        responseSchema: receiptSchema as any,
+        responseSchema: receiptSchema,
         temperature: 0.0
       }
     });
@@ -128,13 +128,14 @@ export async function POST(req: NextRequest) {
     let structuredData;
     try {
       structuredData = JSON.parse(parsedJson);
-    } catch (e) {
+    } catch {
       return NextResponse.json({ error: "Failed to parse Gemini JSON response.", raw: parsedJson }, { status: 500 });
     }
 
     return NextResponse.json({ rawText, structuredData });
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error("OCR route error:", err);
-    return NextResponse.json({ error: err.message || "Unexpected error" }, { status: 500 });
+    const message = err instanceof Error ? err.message : "Unexpected error";
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
