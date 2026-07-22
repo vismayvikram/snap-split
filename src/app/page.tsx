@@ -24,6 +24,8 @@ import {
   Split,
   ShieldAlert,
   Share2,
+  Copy,
+  ExternalLink,
 } from "lucide-react";
 
 // --- Types -------------------------------------------------------------------
@@ -737,12 +739,14 @@ function AssignmentScreen({
 
 // --- ResultsScreen -----------------------------------------------------------
 
-function ResultsScreen({ data, result, payee, onPayeeChange, onShare }: {
+function ResultsScreen({ data, result, payee, onPayeeChange, onShare, isSharing, shareUrl }: {
   data: EditableData;
   result: SplitResult;
   payee: Pick<Bill, "payeeName" | "payeeUpiId">;
   onPayeeChange: (payee: Pick<Bill, "payeeName" | "payeeUpiId">) => void;
   onShare: () => void;
+  isSharing: boolean;
+  shareUrl: string | null;
 }) {
   const upiId = payee.payeeUpiId ?? "";
   const hasValidUpiId = UPI_ID_PATTERN.test(upiId);
@@ -838,10 +842,53 @@ function ResultsScreen({ data, result, payee, onPayeeChange, onShare }: {
         )}
       </div>
 
-      <button onClick={onShare} disabled={!hasValidUpiId} className="flex items-center justify-center gap-2 w-full rounded-xl px-4 py-3 text-sm font-bold bg-gradient-to-r from-teal-500 to-emerald-500 text-slate-950 shadow-lg shadow-teal-500/20 hover:shadow-teal-500/30 transition-all active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40 disabled:shadow-none">
-        <Share2 className="w-4 h-4" />
-        Share split
-      </button>
+      {shareUrl ? (
+        <div className="rounded-2xl border border-emerald-500/30 bg-emerald-500/[0.04] p-5">
+          <div className="flex items-center gap-2 mb-3">
+            <CheckCircle2 className="w-5 h-5 text-emerald-400" />
+            <h3 className="text-sm font-bold text-emerald-400">Share link created!</h3>
+          </div>
+          <p className="text-xs text-slate-400 mb-3">The link was copied to your clipboard.</p>
+          <div className="flex flex-col sm:flex-row gap-2">
+            <input
+              value={shareUrl}
+              readOnly
+              className="flex-1 rounded-xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-sm text-slate-200 font-mono"
+            />
+            <div className="flex gap-2">
+              <button
+                onClick={() => {
+                  if (navigator.share) {
+                    navigator.share({ url: shareUrl }).catch(console.error);
+                  } else {
+                    navigator.clipboard.writeText(shareUrl);
+                  }
+                }}
+                className="flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl text-sm font-bold bg-slate-800 text-slate-200 hover:bg-slate-700 transition-all active:scale-95"
+              >
+                <Copy className="w-4 h-4" />
+                Copy
+              </button>
+              <a
+                href={shareUrl}
+                target="_blank"
+                className="flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl text-sm font-bold bg-teal-500 text-slate-950 hover:bg-teal-400 transition-all active:scale-95"
+              >
+                <ExternalLink className="w-4 h-4" />
+                Open
+              </a>
+            </div>
+          </div>
+        </div>
+      ) : (
+        <button onClick={onShare} disabled={!hasValidUpiId || isSharing} className="flex items-center justify-center gap-2 w-full rounded-xl px-4 py-3 text-sm font-bold bg-gradient-to-r from-teal-500 to-emerald-500 text-slate-950 shadow-lg shadow-teal-500/20 hover:shadow-teal-500/30 transition-all active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40 disabled:shadow-none">
+          {isSharing ? (
+            <><Loader2 className="w-4 h-4 animate-spin" /> Saving...</>
+          ) : (
+            <><Share2 className="w-4 h-4" /> Share split</>
+          )}
+        </button>
+      )}
     </div>
   );
 }
@@ -989,6 +1036,8 @@ export default function Home() {
   // Assignments keyed by itemId → friendId[] (preserved across Back navigation)
   const [assignments, setAssignments] = useState<Assignments>({});
   const [payee, setPayee] = useState<Pick<Bill, "payeeName" | "payeeUpiId">>({});
+  const [shareUrl, setShareUrl] = useState<string | null>(null);
+  const [isSharing, setIsSharing] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
@@ -1046,9 +1095,40 @@ export default function Home() {
     setFriends([{ id: newFriendId(), name: "You" }]);
     setAssignments({});
     setPayee({});
+    setShareUrl(null);
+    setIsSharing(false);
     setStep("capture");
     if (fileInputRef.current) fileInputRef.current.value = "";
     if (cameraInputRef.current) cameraInputRef.current.value = "";
+  };
+
+  const handleShare = async () => {
+    if (!confirmedData) return;
+    setIsSharing(true);
+    try {
+      const bill: Bill = {
+        ...confirmedData,
+        friends,
+        assignments,
+        payeeUpiId: payee.payeeUpiId,
+        payeeName: payee.payeeName,
+      };
+      const res = await fetch("/api/bills", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ bill }),
+      });
+      if (!res.ok) throw new Error(await res.text());
+      const { id } = (await res.json()) as { id: string };
+      const url = `${window.location.origin}/share/${id}`;
+      setShareUrl(url);
+      await navigator.clipboard.writeText(url);
+    } catch (err) {
+      console.error(err);
+      alert("Failed to save and share. Check the console for details.");
+    } finally {
+      setIsSharing(false);
+    }
   };
 
   // Advance to review automatically once parsing succeeds
@@ -1421,7 +1501,9 @@ export default function Home() {
               )}
               payee={payee}
               onPayeeChange={setPayee}
-              onShare={() => alert("Share links are coming in the next step of the build.")}
+              onShare={handleShare}
+              isSharing={isSharing}
+              shareUrl={shareUrl}
             />
             <div className="max-w-4xl w-full mx-auto">
               <button
