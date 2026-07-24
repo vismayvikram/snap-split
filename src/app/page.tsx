@@ -26,6 +26,7 @@ import {
   Share2,
   Copy,
   ExternalLink,
+  Check,
 } from "lucide-react";
 
 // --- Types -------------------------------------------------------------------
@@ -748,6 +749,16 @@ function ResultsScreen({ data, result, payee, onPayeeChange, onShare, isSharing,
   isSharing: boolean;
   shareUrl: string | null;
 }) {
+  // Local-only paid tracking (pre-share). Once shared, the /share page syncs to DB.
+  const [paidLocally, setPaidLocally] = useState<Record<string, boolean>>({});
+
+  const togglePaid = (friendId: string) => {
+    setPaidLocally((prev) => ({ ...prev, [friendId]: !prev[friendId] }));
+  };
+
+  const paidCount = result.perPerson.filter((p) => paidLocally[p.friendId]).length;
+  const totalCount = result.perPerson.length;
+
   const upiId = payee.payeeUpiId ?? "";
   const hasValidUpiId = UPI_ID_PATTERN.test(upiId);
   const upiError = upiId.length === 0
@@ -764,22 +775,64 @@ function ResultsScreen({ data, result, payee, onPayeeChange, onShare, isSharing,
         <p className="mt-2 text-xs text-slate-500">Items {data.currency}{result.itemsSubtotal.toFixed(2)} · Receipt total {data.currency}{data.receiptTotal.toFixed(2)}</p>
       </div>
 
-      <div className="flex items-center gap-2 px-1">
-        <UserCheck className="w-4 h-4 text-teal-400" />
-        <h2 className="text-sm font-bold text-slate-200">Everyone&apos;s share</h2>
+      <div className="flex items-center justify-between gap-2 px-1">
+        <div className="flex items-center gap-2">
+          <UserCheck className="w-4 h-4 text-teal-400" />
+          <h2 className="text-sm font-bold text-slate-200">Everyone&apos;s share</h2>
+        </div>
+        <span className="text-xs font-semibold text-slate-500">
+          {paidCount === totalCount && totalCount > 0
+            ? <span className="text-emerald-400">All {totalCount} paid ✓</span>
+            : <>{paidCount} of {totalCount} paid</>}
+        </span>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {result.perPerson.map((person, index) => {
           const color = friendColor(index);
+          const isPaid = Boolean(paidLocally[person.friendId]);
           return (
-            <section key={person.friendId} className="rounded-2xl border border-slate-800 bg-slate-900/45 overflow-hidden">
-              <div className="flex items-center justify-between gap-3 px-4 py-3.5 border-b border-slate-800 bg-slate-950/40">
+            <section
+              key={person.friendId}
+              className={`rounded-2xl border overflow-hidden transition-all duration-300 ${
+                isPaid
+                  ? "border-teal-500/30 bg-teal-950/20 opacity-60"
+                  : "border-slate-800 bg-slate-900/45"
+              }`}
+            >
+              <div className={`flex items-center justify-between gap-3 px-4 py-3.5 border-b transition-colors duration-300 ${
+                isPaid ? "border-teal-500/20 bg-teal-950/30" : "border-slate-800 bg-slate-950/40"
+              }`}>
                 <div className="flex items-center gap-2.5 min-w-0">
-                  <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-extrabold border ${color.bg} ${color.border} ${color.text}`}>{person.friendName.slice(0, 1).toUpperCase()}</div>
-                  <h3 className="font-bold text-slate-100 truncate">{person.friendName}</h3>
+                  <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-extrabold border ${color.bg} ${color.border} ${color.text}`}>
+                    {isPaid ? <Check className="w-4 h-4" /> : person.friendName.slice(0, 1).toUpperCase()}
+                  </div>
+                  <h3 className={`font-bold truncate transition-colors duration-300 ${
+                    isPaid ? "text-slate-400 line-through" : "text-slate-100"
+                  }`}>{person.friendName}</h3>
                 </div>
-                <span className="text-lg font-extrabold text-teal-400 shrink-0">{data.currency}{person.total.toFixed(2)}</span>
+                <div className="flex items-center gap-2 shrink-0">
+                  {isPaid ? (
+                    <span className="flex items-center gap-1 text-xs font-bold text-teal-400">
+                      <CheckCircle2 className="w-3.5 h-3.5" /> Paid
+                    </span>
+                  ) : (
+                    <span className="text-lg font-extrabold text-teal-400">
+                      {data.currency}{person.total.toFixed(2)}
+                    </span>
+                  )}
+                  <button
+                    onClick={() => togglePaid(person.friendId)}
+                    title={isPaid ? "Mark as unpaid" : "Mark as paid"}
+                    className={`w-7 h-7 rounded-full flex items-center justify-center border transition-all duration-200 active:scale-90 ${
+                      isPaid
+                        ? "bg-teal-500 border-teal-400 text-slate-950 shadow-md shadow-teal-500/30"
+                        : "bg-slate-800 border-slate-700 text-slate-500 hover:border-teal-500/60 hover:text-teal-400"
+                    }`}
+                  >
+                    <Check className="w-3.5 h-3.5" />
+                  </button>
+                </div>
               </div>
 
               <div className="px-4 py-3 border-b border-slate-800/80">

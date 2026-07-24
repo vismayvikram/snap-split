@@ -18,6 +18,7 @@ This isn't a lesser Splitwise. It's a single-use utility. You don't build a mult
 - **Proportional tax/tip split:** Each person's tax/tip share is calculated based on their subtotal relative to the bill's subtotal.
 - **Results screen:** Get a per-person itemized total.
 - **Shareable link & UPI payment:** Send a link to friends, and they'll see what they owe along with a UPI deep link (`upi://pay`) for 1-tap payment.
+- **Mark as Paid toggle:** Tap a checkmark on any person's card to mark them as settled. State is shared and persisted — everyone with the link sees who's been checked off in real time.
 
 ## Explicitly Out of Scope
 
@@ -25,6 +26,10 @@ This isn't a lesser Splitwise. It's a single-use utility. You don't build a mult
 - Persistent ledger across multiple bills
 - Running balance / debt-netting across a friend group over time
 - Recurring expenses
+
+## Design Decisions
+
+**Mark as Paid is honor-system.** Anyone with the share link can mark any person as paid or unpaid. This is intentional — the toggle is a shared visual checklist for in-person settlements (think a group todo list everyone can see and update), not a payment verification mechanism. Given the app's ephemeral, no-auth model, adding per-user write restrictions would require authentication, which is explicitly out of scope. Last-write-wins; concurrent edits are acceptable at this feature's stakes.
 
 ## Getting Started
 

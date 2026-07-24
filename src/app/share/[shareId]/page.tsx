@@ -11,6 +11,8 @@ import {
   Copy,
   ChevronRight,
   ChevronLeft,
+  Check,
+  CheckCircle2,
 } from "lucide-react";
 import { calculateSplit, type SplitResult } from "../../splitCalculator";
 import QRCode from "qrcode";
@@ -67,6 +69,13 @@ export default function SharePage() {
   const [selectedFriendId, setSelectedFriendId] = useState<string | null>(null);
   const [qrCodeUrl, setQrCodeUrl] = useState<string | null>(null);
 
+  // Paid status — synced to DB via PATCH on every toggle.
+  const [paidStatus, setPaidStatus] = useState<Record<string, boolean>>({});
+  // Tracks which friendId is currently being toggled (for loading indicator).
+  const [togglingId, setTogglingId] = useState<string | null>(null);
+  // Non-blocking error toast for failed PATCH.
+  const [patchError, setPatchError] = useState<string | null>(null);
+
   useEffect(() => {
     fetch(`/api/bills/${shareId}`)
       .then((res) => {
@@ -75,6 +84,8 @@ export default function SharePage() {
       })
       .then((data) => {
         setBill(data.bill as StoredBill);
+        // Initialise paid status from DB (may be {} for a brand-new bill).
+        setPaidStatus((data.paidStatus as Record<string, boolean>) ?? {});
         setLoading(false);
       })
       .catch((err) => {
@@ -89,7 +100,7 @@ export default function SharePage() {
     setTimeout(() => setCopied(false), 2000);
   };
 
-  const result = useMemo(() => {
+  const result = useMemo<SplitResult | null>(() => {
     if (!bill) return null;
     return calculateSplit(
       bill.items,
@@ -110,14 +121,46 @@ export default function SharePage() {
       return;
     }
     const upiHref = `upi://pay?pa=${bill.payeeUpiId}&am=${selectedPerson.total.toFixed(2)}&tn=SnapSplit:+${encodeURIComponent(bill.payeeName || "Payment")}&cu=INR`;
-    QRCode.toDataURL(upiHref, { 
-      width: 200, 
-      margin: 2, 
-      color: { dark: '#0f172a', light: '#ffffff' } 
+    QRCode.toDataURL(upiHref, {
+      width: 200,
+      margin: 2,
+      color: { dark: '#0f172a', light: '#ffffff' }
     })
       .then(setQrCodeUrl)
       .catch(console.error);
   }, [selectedPerson, bill?.payeeUpiId, bill?.payeeName]);
+
+  /**
+   * Toggle the paid state for a person.
+   * Optimistically updates local state, then PATCHes the DB.
+   * Reverts on failure and shows a brief error message.
+   */
+  const handleTogglePaid = async (friendId: string) => {
+    if (togglingId) return; // Prevent concurrent toggles
+    const current = Boolean(paidStatus[friendId]);
+    const next = !current;
+
+    // Optimistic update
+    setPaidStatus((prev) => ({ ...prev, [friendId]: next }));
+    setTogglingId(friendId);
+    setPatchError(null);
+
+    try {
+      const res = await fetch(`/api/bills/${shareId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ friendId, paid: next }),
+      });
+      if (!res.ok) throw new Error(`Server error ${res.status}`);
+    } catch {
+      // Revert on failure
+      setPaidStatus((prev) => ({ ...prev, [friendId]: current }));
+      setPatchError("Couldn't save — check your connection and try again.");
+      setTimeout(() => setPatchError(null), 4000);
+    } finally {
+      setTogglingId(null);
+    }
+  };
 
   if (loading) {
     return (
@@ -142,6 +185,9 @@ export default function SharePage() {
     );
   }
 
+  const paidCount = result.perPerson.filter((p) => paidStatus[p.friendId]).length;
+  const totalCount = result.perPerson.length;
+
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans">
       <header className="border-b border-slate-900 bg-slate-950/80 backdrop-blur-md sticky top-0 z-50 px-4 py-3">
@@ -164,7 +210,16 @@ export default function SharePage() {
         </div>
       </header>
 
+      {/* Non-blocking patch error toast */}
+      {patchError && (
+        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 px-4 py-2.5 rounded-xl bg-rose-950 border border-rose-500/40 text-rose-300 text-xs font-semibold shadow-xl animate-in slide-in-from-bottom-4 duration-300">
+          <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+          {patchError}
+        </div>
+      )}
+
       <main className="flex-1 max-w-4xl w-full mx-auto p-4 md:p-6 flex flex-col gap-6">
+        {/* Grand total card */}
         <div className="rounded-2xl border border-teal-500/25 bg-gradient-to-br from-teal-500/10 via-slate-900/70 to-slate-950 px-5 py-6 text-center shadow-xl shadow-teal-500/5">
           <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-teal-400">Total to split</p>
           <p className="mt-1 text-4xl font-extrabold tracking-tight text-slate-100">
@@ -172,6 +227,14 @@ export default function SharePage() {
           </p>
           <p className="mt-2 text-xs text-slate-500">
             Items {bill.currency}{result.itemsSubtotal.toFixed(2)}
+          </p>
+          {/* Paid summary */}
+          <p className="mt-2 text-xs font-semibold">
+            {paidCount === totalCount && totalCount > 0 ? (
+              <span className="text-emerald-400">All {totalCount} paid ✓</span>
+            ) : (
+              <span className="text-slate-500">{paidCount} of {totalCount} paid</span>
+            )}
           </p>
         </div>
 
@@ -184,17 +247,45 @@ export default function SharePage() {
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
               {result.perPerson.map((person, index) => {
                 const color = friendColor(index);
+                const isPaid = Boolean(paidStatus[person.friendId]);
+                const isToggling = togglingId === person.friendId;
                 return (
-                  <button
-                    key={person.friendId}
-                    onClick={() => setSelectedFriendId(person.friendId)}
-                    className={`flex flex-col items-center gap-2 p-4 rounded-xl border border-slate-800 bg-slate-900/45 hover:bg-slate-800/80 hover:border-slate-700 transition-all active:scale-95`}
-                  >
-                    <div className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-extrabold border ${color.bg} ${color.border} ${color.text}`}>
-                      {person.friendName.slice(0, 1).toUpperCase()}
-                    </div>
-                    <span className="font-bold text-slate-200 text-sm truncate w-full text-center">{person.friendName}</span>
-                  </button>
+                  <div key={person.friendId} className="relative">
+                    <button
+                      onClick={() => setSelectedFriendId(person.friendId)}
+                      className={`w-full flex flex-col items-center gap-2 p-4 rounded-xl border transition-all active:scale-95 ${
+                        isPaid
+                          ? "border-teal-500/25 bg-teal-950/15 opacity-60"
+                          : "border-slate-800 bg-slate-900/45 hover:bg-slate-800/80 hover:border-slate-700"
+                      }`}
+                    >
+                      <div className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-extrabold border ${color.bg} ${color.border} ${color.text}`}>
+                        {isPaid ? <Check className="w-5 h-5" /> : person.friendName.slice(0, 1).toUpperCase()}
+                      </div>
+                      <span className={`font-bold text-sm truncate w-full text-center transition-colors ${isPaid ? "text-slate-400 line-through" : "text-slate-200"}`}>
+                        {person.friendName}
+                      </span>
+                      {isPaid && (
+                        <span className="text-[10px] font-bold text-teal-400">Paid</span>
+                      )}
+                    </button>
+                    {/* Paid toggle button — overlaid top-right */}
+                    <button
+                      onClick={(e) => { e.stopPropagation(); handleTogglePaid(person.friendId); }}
+                      disabled={Boolean(togglingId)}
+                      title={isPaid ? "Mark as unpaid" : "Mark as paid"}
+                      className={`absolute top-2 right-2 w-6 h-6 rounded-full flex items-center justify-center border transition-all duration-200 active:scale-90 disabled:opacity-50 ${
+                        isPaid
+                          ? "bg-teal-500 border-teal-400 text-slate-950 shadow-sm shadow-teal-500/30"
+                          : "bg-slate-800 border-slate-700 text-slate-500 hover:border-teal-500/60 hover:text-teal-400"
+                      }`}
+                    >
+                      {isToggling
+                        ? <Loader2 className="w-3 h-3 animate-spin" />
+                        : <Check className="w-3 h-3" />
+                      }
+                    </button>
+                  </div>
                 );
               })}
             </div>
@@ -203,18 +294,20 @@ export default function SharePage() {
           <>
             <div className="flex items-center justify-between px-1">
               <h2 className="text-sm font-bold text-slate-200">Your Share</h2>
-              <button 
+              <button
                 onClick={() => setSelectedFriendId(null)}
                 className="flex items-center gap-1 text-xs font-semibold text-slate-400 hover:text-slate-200 transition-colors"
               >
                 <ChevronLeft className="w-4 h-4" /> Not you?
               </button>
             </div>
-            
+
             {(() => {
               const person = selectedPerson;
               const index = result.perPerson.findIndex(p => p.friendId === person.friendId);
               const color = friendColor(index);
+              const isPaid = Boolean(paidStatus[person.friendId]);
+              const isToggling = togglingId === person.friendId;
               const upiHref = bill.payeeUpiId
                 ? `upi://pay?pa=${bill.payeeUpiId}&am=${person.total.toFixed(2)}&tn=SnapSplit:+${encodeURIComponent(bill.payeeName || "Payment")}&cu=INR`
                 : null;
@@ -224,13 +317,39 @@ export default function SharePage() {
                   <div className="flex items-center justify-between gap-3 px-4 py-3.5 border-b border-slate-800 bg-slate-950/40">
                     <div className="flex items-center gap-2.5 min-w-0">
                       <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-extrabold border ${color.bg} ${color.border} ${color.text}`}>
-                        {person.friendName.slice(0, 1).toUpperCase()}
+                        {isPaid ? <Check className="w-4 h-4" /> : person.friendName.slice(0, 1).toUpperCase()}
                       </div>
-                      <h3 className="font-bold text-slate-100 truncate">{person.friendName}</h3>
+                      <h3 className={`font-bold truncate transition-colors ${isPaid ? "text-slate-400 line-through" : "text-slate-100"}`}>
+                        {person.friendName}
+                      </h3>
                     </div>
-                    <span className="text-lg font-extrabold text-teal-400 shrink-0">
-                      {bill.currency}{person.total.toFixed(2)}
-                    </span>
+                    <div className="flex items-center gap-2 shrink-0">
+                      {isPaid ? (
+                        <span className="flex items-center gap-1 text-xs font-bold text-teal-400">
+                          <CheckCircle2 className="w-3.5 h-3.5" /> Paid
+                        </span>
+                      ) : (
+                        <span className="text-lg font-extrabold text-teal-400">
+                          {bill.currency}{person.total.toFixed(2)}
+                        </span>
+                      )}
+                      {/* Mark as paid / unpaid button */}
+                      <button
+                        onClick={() => handleTogglePaid(person.friendId)}
+                        disabled={Boolean(togglingId)}
+                        title={isPaid ? "Mark as unpaid" : "Mark as paid"}
+                        className={`w-7 h-7 rounded-full flex items-center justify-center border transition-all duration-200 active:scale-90 disabled:opacity-50 ${
+                          isPaid
+                            ? "bg-teal-500 border-teal-400 text-slate-950 shadow-md shadow-teal-500/30"
+                            : "bg-slate-800 border-slate-700 text-slate-500 hover:border-teal-500/60 hover:text-teal-400"
+                        }`}
+                      >
+                        {isToggling
+                          ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          : <Check className="w-3.5 h-3.5" />
+                        }
+                      </button>
+                    </div>
                   </div>
 
                   <div className="px-4 py-3 border-b border-slate-800/80">
