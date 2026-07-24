@@ -109,7 +109,7 @@ export default function SharePage() {
       setQrCodeUrl(null);
       return;
     }
-    const upiHref = `upi://pay?pa=${encodeURIComponent(bill.payeeUpiId)}&am=${selectedPerson.total.toFixed(2)}&tn=SplitSnap:+${encodeURIComponent(bill.payeeName || "Payment")}&cu=INR`;
+    const upiHref = `upi://pay?pa=${bill.payeeUpiId}&am=${selectedPerson.total.toFixed(2)}&tn=SplitSnap:+${encodeURIComponent(bill.payeeName || "Payment")}&cu=INR`;
     QRCode.toDataURL(upiHref, { 
       width: 200, 
       margin: 2, 
@@ -216,7 +216,7 @@ export default function SharePage() {
               const index = result.perPerson.findIndex(p => p.friendId === person.friendId);
               const color = friendColor(index);
               const upiHref = bill.payeeUpiId
-                ? `upi://pay?pa=${encodeURIComponent(bill.payeeUpiId)}&am=${person.total.toFixed(2)}&tn=SplitSnap:+${encodeURIComponent(bill.payeeName || "Payment")}&cu=INR`
+                ? `upi://pay?pa=${bill.payeeUpiId}&am=${person.total.toFixed(2)}&tn=SplitSnap:+${encodeURIComponent(bill.payeeName || "Payment")}&cu=INR`
                 : null;
 
               return (
