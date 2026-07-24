@@ -1185,7 +1185,7 @@ export default function Home() {
             </div>
             <div>
               <span className="font-extrabold text-lg tracking-tight bg-gradient-to-r from-white via-slate-200 to-slate-400 bg-clip-text text-transparent">
-                SplitSnap
+                SnapSplit
               </span>
               <span className="ml-1.5 px-2 py-0.5 rounded-full text-[10px] font-bold bg-teal-500/10 text-teal-400 border border-teal-500/20">
                 Phase 2
@@ -1520,7 +1520,7 @@ export default function Home() {
       </main>
 
       <footer className="mt-auto border-t border-slate-900 py-4 text-center text-xs text-slate-600">
-        <p>SplitSnap {new Date().getFullYear()} - Built using Google Vision and Gemini</p>
+        <p>SnapSplit {new Date().getFullYear()} - Built using Google Vision and Gemini</p>
       </footer>
     </div>
   );

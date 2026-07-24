@@ -1,13 +1,12 @@
 {
-  "name": "split-snap",
+  "name": "snap-split",
   "version": "0.1.0",
   "private": true,
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint",
-    "test:bill-roundtrip": "node scripts/test-bill-roundtrip.mjs"
+    "lint": "eslint"
   },
   "dependencies": {
     "@google/genai": "^2.12.0",

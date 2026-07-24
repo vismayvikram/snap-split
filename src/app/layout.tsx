@@ -13,7 +13,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "SplitSnap — Snap, Assign, Split!",
+  title: "SnapSplit — Snap, Assign, Split!",
   description: "Photograph a receipt, tap who had what, get a shareable breakdown with payment links — no signup, no ledger, done in under a minute.",
 };
 

@@ -109,7 +109,7 @@ export default function SharePage() {
       setQrCodeUrl(null);
       return;
     }
-    const upiHref = `upi://pay?pa=${bill.payeeUpiId}&am=${selectedPerson.total.toFixed(2)}&tn=SplitSnap:+${encodeURIComponent(bill.payeeName || "Payment")}&cu=INR`;
+    const upiHref = `upi://pay?pa=${bill.payeeUpiId}&am=${selectedPerson.total.toFixed(2)}&tn=SnapSplit:+${encodeURIComponent(bill.payeeName || "Payment")}&cu=INR`;
     QRCode.toDataURL(upiHref, { 
       width: 200, 
       margin: 2, 
@@ -151,7 +151,7 @@ export default function SharePage() {
               <Receipt className="w-5 h-5 stroke-[2.5]" />
             </div>
             <span className="font-extrabold text-lg tracking-tight bg-gradient-to-r from-white via-slate-200 to-slate-400 bg-clip-text text-transparent">
-              SplitSnap
+              SnapSplit
             </span>
           </div>
           <button
@@ -216,7 +216,7 @@ export default function SharePage() {
               const index = result.perPerson.findIndex(p => p.friendId === person.friendId);
               const color = friendColor(index);
               const upiHref = bill.payeeUpiId
-                ? `upi://pay?pa=${bill.payeeUpiId}&am=${person.total.toFixed(2)}&tn=SplitSnap:+${encodeURIComponent(bill.payeeName || "Payment")}&cu=INR`
+                ? `upi://pay?pa=${bill.payeeUpiId}&am=${person.total.toFixed(2)}&tn=SnapSplit:+${encodeURIComponent(bill.payeeName || "Payment")}&cu=INR`
                 : null;
 
               return (
@@ -305,7 +305,7 @@ export default function SharePage() {
       </main>
 
       <footer className="mt-auto border-t border-slate-900 py-4 text-center text-xs text-slate-600">
-        <p>SplitSnap — Shared bill</p>
+        <p>SnapSplit — Shared bill</p>
       </footer>
     </div>
   );
